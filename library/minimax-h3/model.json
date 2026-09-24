@@ -47,5 +47,6 @@
       "title": "FastH3 Image to Video",
       "source": "comfy-template:video_fastvideo_fasth3_i2v"
     }
-  ]
+  ],
+  "order": 1
 }

@@ -31,7 +31,7 @@ function toast(msg, kind = '') {
 }
 
 const fmtBytes = n => !n ? '0 B' : n < 1024 ** 2 ? `${(n / 1024).toFixed(0)} KB` : n < 1024 ** 3 ? `${(n / 1024 ** 2).toFixed(1)} MB` : `${(n / 1024 ** 3).toFixed(2)} GB`;
-const fmtTime = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, '0')}s`;
+const fmtTime = s => s < 1 ? 'under 1s' : s < 60 ? `${Math.round(s)}s` : `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, '0')}s`;
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // ponytail: minimal markdown for workflow notes (headings, bold, code, links, paragraphs)
 const md = s => esc(s)
@@ -62,7 +62,7 @@ function renderRail() {
   const box = $('#models');
   box.replaceChildren();
   for (const kind of ['video', 'image', 'audio', 'other']) {
-    const ms = S.library.filter(m => (kindLabel[m.kind] ? m.kind : 'other') === kind);
+    const ms = railOrder().filter(m => (kindLabel[m.kind] ? m.kind : 'other') === kind);
     if (!ms.length) continue;
     box.append(h('div', { class: 'rail-kind' }, kindLabel[kind] || 'Other'));
     for (const m of ms) {
@@ -74,13 +74,17 @@ function renderRail() {
   }
 }
 
+const KINDS = ['video', 'image', 'audio'];
+const railOrder = () => [...S.library].sort((a, b) =>
+  ((KINDS.indexOf(a.kind) + 4) % 4) - ((KINDS.indexOf(b.kind) + 4) % 4) || (a.order ?? 99) - (b.order ?? 99) || a.name.localeCompare(b.name));
+
 async function loadLibrary() {
   S.library = await api.get('/studio/api/library');
   renderRail();
 }
 
 async function selectModel(mid, wid) {
-  const m = S.library.find(x => x.id === mid) || S.library[0];
+  const m = S.library.find(x => x.id === mid) || railOrder()[0];
   if (!m) return;
   S.model = m;
   store.set('model', m.id);
@@ -97,11 +101,13 @@ async function selectWorkflow(wid) {
   S.loading = true; S.fields = []; S.errorsByNode = {};
   renderPanel();
   try {
-    const [ui, info, layout] = await Promise.all([
+    const [ui, info, layout, missing] = await Promise.all([
       api.get(`/studio/api/workflow/${m.id}/${wid}`), api.objectInfo(), api.get(`/studio/api/layout/${m.id}/${wid}`),
+      api.get(`/studio/api/missing?model=${m.id}&workflow=${wid}`),
     ]);
     if (S.wfId !== wid) return;
     S.ui = ui; S.info = info; S.layout = layout || {};
+    S.serverMissing = (missing[m.id] || []).filter(x => x.hf_repo); // loader files are checked client-side
     S.notes = notesOf(ui);
     S.missingNodes = missingNodeTypes(ui, info);
     S.prompt = await toApiPrompt(ui);
@@ -168,10 +174,14 @@ function panelSections() {
   if (S.model.notes) out.push(h('div', { class: 'callout' }, S.model.notes));
   if (S.missingNodes.length) {
     out.push(h('div', { class: 'callout warn' },
-      h('b', {}, 'Missing custom nodes. '), 'Install these node packs, then restart ComfyUI:',
-      h('ul', {}, [...new Set(S.missingNodes.map(n => n.pack || n.type))].map(p => h('li', {}, p)))));
+      h('b', {}, 'Missing custom nodes. '), 'Install these node packs (the Kaggle launcher installs kaggle/nodes.txt), then restart ComfyUI:',
+      h('ul', {}, packList(S.missingNodes).map(([p, types]) => h('li', {}, p, h('span', { class: 'muted' }, ` — ${types.join(', ')}`))))));
   }
   const missing = missingModelFields(S.fields, declaredModels(S.ui));
+  for (const r of S.serverMissing || []) {
+    out.push(h('div', { class: 'callout warn' }, h('b', {}, `${r.hf_repo} not downloaded. `), `Needed in ${r.path}. `,
+      h('button', { class: 'btn sm', onclick: () => { startDownload({ hf_repo: r.hf_repo, path: r.path }); showTab('downloads'); } }, 'Download')));
+  }
   if (missing.length) {
     out.push(h('div', { class: 'callout warn' },
       h('b', {}, `${missing.length} model file${missing.length > 1 ? 's' : ''} not installed. `),
@@ -185,7 +195,7 @@ function panelSections() {
   }
 
   const prompts = byRole('prompt');
-  if (prompts.length) out.push(h('div', { class: 'sec' }, h('h2', {}, prompts.length > 1 ? 'Prompts' : 'Prompt'), prompts.map(fieldEl)));
+  if (prompts.length) out.push(h('div', { class: 'sec' }, prompts.length > 1 && h('h2', {}, 'Prompts'), prompts.map(fieldEl)));
   const media = byRole('media');
   if (media.length) out.push(h('div', { class: 'sec' }, h('h2', {}, 'Inputs'), media.map(fieldEl)));
   const settings = [...byRole('seed'), ...byRole('setting')];
@@ -219,6 +229,19 @@ function panelSections() {
   return out;
 }
 
+// group missing node types by pack; registry id "comfyui-kjnodes" and git "kijai/ComfyUI-KJNodes" are one pack
+function packList(missing) {
+  const packs = new Map();
+  for (const { type, pack } of missing) {
+    const key = (pack || '').split('/').pop().toLowerCase() || type;
+    const e = packs.get(key) || { name: pack || 'Unknown pack', types: [] };
+    if (pack?.includes('/')) e.name = pack;
+    e.types.push(type);
+    packs.set(key, e);
+  }
+  return [...packs.values()].map(e => [e.name, e.types]);
+}
+
 // numbers/toggles pair up two per row; wide things take a full row
 function grid(fields) {
   const out = [];
@@ -238,7 +261,7 @@ const hasSlider = f => ['INT', 'FLOAT'].includes(f.type) && f.opts.min != null &
 function fieldEl(f) {
   const id = `f-${f.key.replace(/[^\w-]/g, '_')}`;
   const wrap = h('div', { class: `field${S.errorsByNode[f.node] ? ' err' : ''}`, 'data-node': f.node });
-  const hint = f.role !== 'advanced' && f.role !== 'prompt' && f.nodeLabel !== f.label ? f.nodeLabel : '';
+  const hint = f.role !== 'advanced' && f.nodeLabel !== f.label && (f.role !== 'prompt' || S.fields.filter(x => x.role === 'prompt').length > 1) ? f.nodeLabel.split(' › ').at(-1) : '';
   wrap.append(h('div', { class: 'field-top' },
     h('label', { for: id, title: `${f.nodeLabel} · ${f.input}` }, f.label, hint && h('span', { class: 'hint' }, hint)),
     h('button', { class: 'field-menu', 'aria-label': `Options for ${f.label}`, onclick: e => fieldMenu(e.currentTarget, f) }, '⋯')));
@@ -261,7 +284,8 @@ function control(f, id) {
     return h('div', { class: 'seed' }, input, seg, dice);
   }
   if (f.type === 'BOOLEAN') {
-    return h('label', { class: 'toggle' }, h('input', { id, type: 'checkbox', checked: !!v, onchange: e => setValue(f, e.target.checked) }), v ? 'On' : 'Off');
+    const state = h('span', {}, v ? 'On' : 'Off');
+    return h('label', { class: 'toggle' }, h('input', { id, type: 'checkbox', checked: !!v, onchange: e => { setValue(f, e.target.checked); state.textContent = e.target.checked ? 'On' : 'Off'; } }), state);
   }
   if (f.type === 'COMBO') {
     const opts = f.options.includes(v) ? f.options : [v, ...f.options];
@@ -467,7 +491,7 @@ function renderFoot(foot = $('#panel-foot')) {
   if (!S.model) { foot.replaceChildren(); return; }
   const running = S.jobs.filter(j => j.status === 'queued' || j.status === 'running');
   const eta = etaFor(S.model.id, S.wfId);
-  foot.replaceChildren(
+  foot.replaceChildren(...[
     h('div', { class: 'eta' }, running.length ? `${running.length} in queue` : eta ? `Usually about ${fmtTime(eta)}` : 'Time estimate appears after the first run'),
     running.length ? h('button', { class: 'btn stop', onclick: cancelRun }, 'Stop') : null,
     h('div', { class: 'runs', title: 'Number of runs' },
@@ -475,7 +499,7 @@ function renderFoot(foot = $('#panel-foot')) {
       h('span', {}, S.runs),
       h('button', { 'aria-label': 'More runs', onclick: () => { S.runs = Math.min(16, S.runs + 1); renderFoot(); } }, '+')),
     h('button', { class: 'go', disabled: S.loading || !S.prompt || !!S.loadError, onclick: generate }, 'Generate'),
-  );
+  ].filter(Boolean));
 }
 
 async function generate() {
@@ -700,7 +724,7 @@ async function pollDownloads() {
   clearTimeout(dlTimer);
   let jobs = [];
   try { jobs = await api.get('/studio/api/downloads'); } catch { /* server restarting */ }
-  const running = jobs.filter(j => j.state === 'running');
+  const running = jobs.filter(j => j.state === 'running' || j.state === 'queued');
   const c = $('#dl-count');
   c.hidden = !running.length; c.textContent = running.length;
   const box = document.getElementById('dl-jobs');
@@ -726,11 +750,11 @@ function jobsTable(jobs) {
     const secs = ((j.ended || Date.now() / 1000) - j.started);
     return h('tr', {},
       h('td', {}, h('div', { class: 'file' }, j.name || j.url), h('div', { class: 'sub' }, j.directory || j.path || '')),
-      h('td', { style: 'width:34%' }, j.state === 'running'
+      h('td', { style: 'width:34%' }, j.state === 'queued' ? h('span', { class: 'sub' }, 'Waiting for a free slot') : j.state === 'running'
         ? h('div', {}, h('div', { class: `bar${j.total ? '' : ' indet'}` }, h('i', { style: j.total ? `width:${pct * 100}%` : '' })),
           h('div', { class: 'sub' }, `${fmtBytes(j.done)}${j.total ? ` of ${fmtBytes(j.total)}` : ''} · ${fmtBytes(j.done / Math.max(secs, 1))}/s`))
         : j.state === 'done' ? h('span', { class: 'badge ok' }, `Done · ${fmtTime(secs)}`) : h('span', { class: 'badge bad', title: j.error }, j.error === 'cancelled' ? 'Cancelled' : `Failed: ${j.error}`)),
-      h('td', { style: 'width:80px;text-align:right' }, j.state === 'running' && h('button', { class: 'ghost sm', onclick: async () => { await api.post(`/studio/api/downloads/${j.id}/cancel`); pollDownloads(); } }, 'Cancel')));
+      h('td', { style: 'width:80px;text-align:right' }, (j.state === 'running' || j.state === 'queued') && h('button', { class: 'ghost sm', onclick: async () => { await api.post(`/studio/api/downloads/${j.id}/cancel`); pollDownloads(); } }, 'Cancel')));
   })));
 }
 
@@ -777,20 +801,25 @@ async function renderMissing() {
   const seen = new Set();
   const uniq = rows.filter(r => { const k = `${r.directory || r.path}/${r.name}`; if (seen.has(k)) return false; seen.add(k); return true; });
   if (!uniq.length) { box.replaceChildren(h('p', {}, h('span', { class: 'badge ok' }, 'All set'), '  Every model your workflows point at is installed.')); return; }
-  const withUrl = uniq.filter(r => r.url || r.hf_repo);
+  const start = r => startDownload(r.hf_repo ? { hf_repo: r.hf_repo, path: r.path } : { url: r.url, directory: r.directory, name: r.name });
+  const byModel = new Map();
+  for (const r of uniq) { if (!byModel.has(r.model)) byModel.set(r.model, []); byModel.get(r.model).push(r); }
   box.replaceChildren(
-    h('div', { class: 'filters' }, h('span', { class: 'muted spacer' }, `${uniq.length} missing across your library`),
-      withUrl.length > 1 && h('button', { class: 'btn sm', onclick: () => withUrl.forEach(r => startDownload(r.hf_repo ? { hf_repo: r.hf_repo, path: r.path } : { url: r.url, directory: r.directory, name: r.name })) }, `Download all ${withUrl.length}`)),
-    h('table', { class: 'list' }, h('thead', {}, h('tr', {}, h('th', {}, 'File'), h('th', {}, 'Used by'), h('th', {}, ''))),
-      h('tbody', {}, uniq.map(r => {
-        const link = h('input', { type: 'url', placeholder: 'Paste a download link', 'aria-label': `Link for ${r.name}` });
-        return h('tr', {},
-          h('td', {}, h('div', { class: 'file' }, r.name), h('div', { class: 'sub' }, r.directory || r.path)),
-          h('td', { class: 'sub' }, r.model),
-          h('td', { style: 'text-align:right;width:40%' }, r.url || r.hf_repo
-            ? h('button', { class: 'btn sm', onclick: () => startDownload(r.hf_repo ? { hf_repo: r.hf_repo, path: r.path } : { url: r.url, directory: r.directory, name: r.name }) }, 'Download')
-            : h('div', { style: 'display:flex;gap:6px' }, link, h('button', { class: 'btn sm', onclick: () => link.value && startDownload({ url: link.value.trim(), directory: r.directory, name: r.name }) }, 'Download'))));
-      }))));
+    h('p', { class: 'muted', style: 'margin:0 0 4px' }, `${uniq.length} files missing across your library. Download per model — these are large.`),
+    h('table', { class: 'list' }, [...byModel].map(([model, rs]) => {
+      const ready = rs.filter(r => r.url || r.hf_repo);
+      return h('tbody', {},
+        h('tr', {}, h('th', { colspan: 2, style: 'padding-top:18px;color:var(--text);font-size:13px' }, model),
+          h('th', { style: 'text-align:right;padding-top:18px' }, ready.length > 1 && h('button', { class: 'btn sm', onclick: () => ready.forEach(start) }, `Download all ${ready.length}`))),
+        rs.map(r => {
+          const link = h('input', { type: 'url', placeholder: 'Paste a download link', 'aria-label': `Link for ${r.name}` });
+          return h('tr', {},
+            h('td', { colspan: 2 }, h('div', { class: 'file' }, r.name), h('div', { class: 'sub' }, r.directory || r.path)),
+            h('td', { style: 'text-align:right;width:44%' }, r.url || r.hf_repo
+              ? h('button', { class: 'btn sm', onclick: () => start(r) }, 'Download')
+              : h('div', { style: 'display:flex;gap:6px' }, link, h('button', { class: 'btn sm', onclick: () => link.value && startDownload({ url: link.value.trim(), directory: r.directory, name: r.name }) }, 'Download'))));
+        }));
+    })));
 }
 
 // ---------- settings ----------
@@ -824,7 +853,8 @@ async function renderSettings() {
 (async function boot() {
   try {
     await loadLibrary();
-    await selectModel(store.get('model'));
+    const q = new URLSearchParams(location.search);
+    await selectModel(q.get('model') || store.get('model'), q.get('workflow'));
   } catch (e) {
     $('#panel-body').replaceChildren(h('div', { class: 'callout warn' }, h('b', {}, 'Could not reach ComfyUI. '), e.message));
   }

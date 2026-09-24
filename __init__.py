@@ -158,6 +158,8 @@ def scan_missing(mid, wid=None):
         if not present:
             out.append({"directory": d, "name": name, "url": url})
     for r in model.get("requires", []):
+        if "{AUK_HOME}" in r["path"] and not os.environ.get("AUK_HOME"):
+            continue  # AuK not installed here; nothing sensible to download into
         path = expand(r["path"])
         if not (os.path.isdir(path) and os.listdir(path)):
             out.append({"hf_repo": r["hf_repo"], "path": path, "name": r["hf_repo"]})
@@ -167,6 +169,7 @@ def scan_missing(mid, wid=None):
 # ---------- downloads ----------
 
 JOBS = {}
+SLOTS = threading.Semaphore(3)  # parallel downloads; the rest wait as "queued"
 
 
 def _hf_snapshot(job):
@@ -206,7 +209,11 @@ def _http(job):
 
 def _run(job):
     try:
-        (_hf_snapshot if job.get("hf_repo") else _http)(job)
+        with SLOTS:
+            if job["cancel"]:
+                raise RuntimeError("cancelled")
+            job["state"] = "running"
+            (_hf_snapshot if job.get("hf_repo") else _http)(job)
         job["state"] = "done"
     except Exception as e:  # surfaced in the UI
         job["state"] = "error"
@@ -218,7 +225,7 @@ def _run(job):
 
 
 def start_download(body):
-    job = {"id": uuid.uuid4().hex[:8], "state": "running", "done": 0, "total": 0,
+    job = {"id": uuid.uuid4().hex[:8], "state": "queued", "done": 0, "total": 0,
            "cancel": False, "started": time.time(), "error": None}
     if body.get("hf_repo"):
         repo = body["hf_repo"]
@@ -257,6 +264,15 @@ async def studio_redirect(request):
 @routes.get("/studio/")
 async def studio_index(request):
     return web.FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+@routes.get("/studio/web/{name}")
+async def studio_asset(request):
+    name = request.match_info["name"]
+    p = WEB / name
+    if "/" in name or "\\" in name or not p.is_file():
+        raise web.HTTPNotFound()
+    return web.FileResponse(p, headers={"Cache-Control": "no-cache"})  # updates show up on reload
 
 
 @routes.get("/studio/api/library")
@@ -401,9 +417,9 @@ async def token_auth(request, handler):
     if not token:
         return await handler(request)
     sent = request.cookies.get("studio_token") or request.headers.get("X-Studio-Token") or ""
-    if hmac.compare_digest(sent.encode(), token.encode()):
+    if hmac.compare_digest(sent.encode("utf-8", "surrogateescape"), token.encode()):
         return await handler(request)
-    if hmac.compare_digest(request.query.get("token", "").encode(), token.encode()):
+    if hmac.compare_digest(request.query.get("token", "").encode("utf-8", "surrogateescape"), token.encode()):
         resp = web.Response(status=302, headers={"Location": request.path})
         resp.set_cookie("studio_token", token, max_age=30 * 86400, httponly=True, samesite="Lax", secure=request.secure)
         return resp
@@ -411,5 +427,5 @@ async def token_auth(request, handler):
 
 
 PromptServer.instance.app.middlewares.append(token_auth)
-PromptServer.instance.app.add_routes([web.static("/studio/web", WEB)])
+
 apply_model_root(load_settings()["model_root"])

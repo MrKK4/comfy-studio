@@ -42,6 +42,7 @@ export function toApiPrompt(workflow) {
 const MODEL_EXT = /\.(safetensors|sft|gguf|ckpt|pt|pth|bin|onnx)$/i;
 const SEED = /^(seed|noise_seed)$/;
 const SETTING = /^(width|height|length|frames|num_frames|frame_count|duration|duration_sec|seconds|fps|frame_rate|steps|cfg|batch_size|shift)$/i;
+const PROMPT_NAME = /^(text|prompt|positive|negative|negative_prompt|lyrics|tags|caption|instruction|description|value)$/i;
 const PRIMITIVE = /^Primitive(Int|Float|String|StringMultiline|Boolean|Node)?$/;
 const FRONTEND_ONLY = new Set(['Reroute', 'Note', 'MarkdownNote', 'PrimitiveNode', 'SetNode', 'GetNode']);
 
@@ -141,15 +142,18 @@ export function deriveFields(prompt, ui, info, layout = {}) {
       if (up) role = 'media';
       else if (SEED.test(input)) role = 'seed';
       else if (spec.type === 'COMBO' && (MODEL_EXT.test(String(value)) || spec.options.some(o => MODEL_EXT.test(String(o))))) role = 'model';
-      else if (spec.type === 'STRING' && (spec.opts.multiline || PRIMITIVE.test(cls) && String(value).length > 40)) role = 'prompt';
+      else if (spec.type === 'STRING' && PROMPT_NAME.test(input) && (spec.opts.multiline || PRIMITIVE.test(cls) && String(value).length > 40)) role = 'prompt';
       else if (SETTING.test(input)) role = 'setting';
       else if (PRIMITIVE.test(cls) && titled) role = 'setting';
-      const label = PRIMITIVE.test(cls) || role === 'prompt' && titled ? title : humanize(input);
+      const neg = /neg/i.test(title + ' ' + input);
+      const label = PRIMITIVE.test(cls) ? title
+        : role === 'prompt' ? (/^(text|prompt|positive|negative|negative_prompt)$/i.test(input) ? (neg ? 'Negative prompt' : 'Prompt') : humanize(input))
+          : humanize(input);
       const f = {
         key, node: id, input, cls, label, nodeLabel, type: spec.type, options: spec.options, opts: spec.opts,
         value, role, upload: up, group: m.group, control: role === 'seed' ? (m.control || 'randomize') : null,
       };
-      if (role === 'prompt' && /neg/i.test(title + ' ' + input)) f.negative = true;
+      if (role === 'prompt' && neg) f.negative = true;
       const o = layout.fields?.[key];
       if (o?.label) f.label = o.label;
       if (o?.hide) f.hidden = true;
