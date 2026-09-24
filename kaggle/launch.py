@@ -79,7 +79,11 @@ env = dict(os.environ)
 if INSTALL_AUK:
     auk = TEMP / "AuK"
     clone("https://github.com/Tencent-Hunyuan/AuK", auk)
-    sh([sys.executable, "-m", "pip", "install", "-q", "-e", f"{auk}[comfyui]"])
+    # --no-deps: AuK pins torch<2.8, which would downgrade Kaggle's torch and break ComfyUI.
+    # These are its runtime deps minus the torch family and the optional ASR/prompt-enhancer stack.
+    sh([sys.executable, "-m", "pip", "install", "-q", "--no-deps", "-e", auk])
+    sh([sys.executable, "-m", "pip", "install", "-q", "transformers>=4.52,<5", "qwen-omni-utils",
+        "omegaconf", "torchdiffeq", "x_transformers>=1.31.14", "accelerate>=0.33", "pyloudnorm", "PyYAML"])
     if not (nodes / "ComfyUI-AuK").exists():
         (nodes / "ComfyUI-AuK").symlink_to(auk / "comfyui" / "ComfyUI-AuK", target_is_directory=True)
     env["AUK_HOME"] = str(auk)

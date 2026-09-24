@@ -8,6 +8,7 @@ function h(tag, attrs = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
+    if (k === 'value' && tag !== 'option') { el.value = v; continue; } // textarea has no value attribute
     if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
     else if (k === 'class') el.className = v;
     else if (k === 'html') el.innerHTML = v;
