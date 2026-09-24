@@ -1,0 +1,22 @@
+{
+  "name": "Krea 2",
+  "kind": "image",
+  "description": "Krea-2 Turbo image model.",
+  "workflows": [
+    {
+      "id": "t2i",
+      "title": "Text to Image",
+      "source": "comfy-template:image_krea2_turbo_t2i"
+    },
+    {
+      "id": "t2i-int8",
+      "title": "Text to Image (int8)",
+      "source": "comfy-template:image_krea2_turbo_t2i_int8"
+    },
+    {
+      "id": "style-reference",
+      "title": "Style Reference (int8)",
+      "source": "comfy-template:image_krea2_turbo_int8_image_style_reference"
+    }
+  ]
+}

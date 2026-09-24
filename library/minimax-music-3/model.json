@@ -1,0 +1,12 @@
+{
+  "name": "MiniMax Music 3",
+  "kind": "audio",
+  "description": "Song generation.",
+  "workflows": [
+    {
+      "id": "music",
+      "title": "Text to Music",
+      "source": "comfy-template:audio_minimax_music_3"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Qwen Image 2.1",
+  "kind": "image",
+  "description": "Qwen image generation and editing.",
+  "workflows": [
+    {
+      "id": "t2i",
+      "title": "Text to Image",
+      "source": "comfy-template:image_qwen_image_2_1_t2i"
+    },
+    {
+      "id": "edit",
+      "title": "Image Edit",
+      "source": "comfy-template:image_qwen_image_2_1_image_edit"
+    },
+    {
+      "id": "bg-removal",
+      "title": "Background Removal",
+      "source": "comfy-template:image_qwen_image_2_1_background_removal"
+    }
+  ]
+}

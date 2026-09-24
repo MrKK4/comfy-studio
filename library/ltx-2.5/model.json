@@ -1,0 +1,22 @@
+{
+  "name": "LTX-2.5",
+  "kind": "video",
+  "description": "Lightricks 22B distilled video + audio.",
+  "workflows": [
+    {
+      "id": "t2v",
+      "title": "Text to Video",
+      "source": "comfy-template:video_ltx2_5_t2v"
+    },
+    {
+      "id": "i2v",
+      "title": "Image to Video",
+      "source": "comfy-template:video_ltx2_5_i2v"
+    },
+    {
+      "id": "flf2v",
+      "title": "First/Last Frame",
+      "source": "comfy-template:video_ltx2_5_flf2v"
+    }
+  ]
+}

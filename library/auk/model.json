@@ -1,0 +1,26 @@
+{
+  "name": "Tencent AuK",
+  "kind": "audio",
+  "description": "Speech generation, cloning and editing.",
+  "workflows": [
+    {
+      "id": "speech",
+      "title": "Generate / Edit Speech"
+    }
+  ],
+  "notes": "Needs the AuK repo installed (Kaggle cell does it) and AUK_HOME set. T4 has no bf16: switch dtype to fp16 in the loader.",
+  "requires": [
+    {
+      "hf_repo": "tencent/AuK",
+      "path": "{AUK_HOME}/ckpts/AuK"
+    },
+    {
+      "hf_repo": "tencent/AuK-Flash",
+      "path": "{AUK_HOME}/ckpts/AuK-Flash"
+    },
+    {
+      "hf_repo": "Qwen/Qwen2.5-Omni-3B",
+      "path": "{AUK_HOME}/ckpts/Qwen2.5-Omni-3B"
+    }
+  ]
+}

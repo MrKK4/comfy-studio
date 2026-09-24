@@ -1,0 +1,4 @@
+# Node packs cloned into ComfyUI/custom_nodes on Kaggle (one git URL per line)
+https://github.com/kijai/ComfyUI-KJNodes            # SetNode/GetNode, GrowMaskWithBlur, ImageResizeKJv2 (uncrop-audio)
+https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite  # VHS_LoadVideo / VHS_VideoCombine (uncrop-audio)
+https://github.com/drozbay/MaskVidExperiments        # MVEx_* subject crop/uncrop (uncrop-audio)

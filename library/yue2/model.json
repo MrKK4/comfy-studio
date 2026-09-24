@@ -1,0 +1,17 @@
+{
+  "name": "YuE2",
+  "kind": "audio",
+  "description": "Lyrics to full song generation.",
+  "workflows": [
+    {
+      "id": "text2music",
+      "title": "Text to Music",
+      "source": "comfy-template:audio_yue2_text2music"
+    },
+    {
+      "id": "music-cover",
+      "title": "Music Cover",
+      "source": "comfy-template:audio_yue2_music_cover"
+    }
+  ]
+}
