@@ -131,6 +131,7 @@ for line in tunnel.stdout:
     if m:
         print(f"\nComfy Studio:  {m.group(0)}/studio/?token={token}")
         print(f"ComfyUI graph: {m.group(0)}/?token={token}")
+        print("Copy-paste the link into a new tab; clicking it from Kaggle gets a 403 (ComfyUI blocks cross-site navigation).")
         print("Keep this link private — anyone with it can run code on this machine.")
         break
 # keep draining cloudflared's output, or its pipe fills up and the tunnel stalls
