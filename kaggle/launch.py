@@ -1,10 +1,8 @@
 """Kaggle launcher: ComfyUI + Comfy Studio + node packs + cloudflared tunnel.
 
-Notebook cell (repo is private, so add a Kaggle secret GITHUB_TOKEN):
+Notebook cell:
 
-    from kaggle_secrets import UserSecretsClient
-    tok = UserSecretsClient().get_secret("GITHUB_TOKEN")
-    !git clone -q https://{tok}@github.com/MrKK4/comfy-studio /kaggle/temp/comfy-studio || git -C /kaggle/temp/comfy-studio pull -q
+    !git clone -q https://github.com/MrKK4/comfy-studio /kaggle/temp/comfy-studio || git -C /kaggle/temp/comfy-studio pull -q
     %run /kaggle/temp/comfy-studio/kaggle/launch.py
 
 Re-running the cell restarts ComfyUI and keeps downloads. Knobs are the env vars below.

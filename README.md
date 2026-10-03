@@ -40,13 +40,11 @@ and [Tencent-Hunyuan/AuK](https://github.com/Tencent-Hunyuan/AuK).
 
 ## Run on Kaggle
 
-1. Add Kaggle secrets: `GITHUB_TOKEN` (repo read access), optionally `HF_TOKEN`, `CIVITAI_TOKEN`.
+1. Optionally add Kaggle secrets `HF_TOKEN`, `CIVITAI_TOKEN`.
 2. One cell:
 
 ```python
-from kaggle_secrets import UserSecretsClient
-tok = UserSecretsClient().get_secret("GITHUB_TOKEN")
-!git clone -q https://{tok}@github.com/MrKK4/comfy-studio /kaggle/temp/comfy-studio || git -C /kaggle/temp/comfy-studio pull -q
+!git clone -q https://github.com/MrKK4/comfy-studio /kaggle/temp/comfy-studio || git -C /kaggle/temp/comfy-studio pull -q
 %run /kaggle/temp/comfy-studio/kaggle/launch.py
 ```
 
